@@ -8,6 +8,7 @@ This repository keeps the documented feature list aligned with the user-maintain
 - addition
 - division
 - multiplication
+- subtraction
 <!-- docs-sync:end -->
 
 Text outside the markers is maintained by the project contributors.
