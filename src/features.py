@@ -1,4 +1,4 @@
-FEATURES: list[str] = ["addition", "division", "multiplication"]
+FEATURES: list[str] = ["addition", "division", "multiplication", "subtraction"]
 
 
 def features() -> list[str]:
