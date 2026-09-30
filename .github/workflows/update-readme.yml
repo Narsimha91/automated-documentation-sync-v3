@@ -1,0 +1,98 @@
+name: Update README features
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "src/**"
+
+permissions: {}
+
+concurrency:
+  group: automated-readme-update
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out pushed revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.14"
+
+      - name: Install test dependencies
+        run: python -m pip install -r requirements-dev.txt
+
+      - name: Run tests
+        run: python -m pytest -q
+
+  update-readme:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check out tested revision
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: "3.14"
+
+      - name: Generate README feature list
+        run: python scripts/update_readme.py
+
+      - name: Commit and push automation branch
+        id: push
+        shell: bash
+        run: |
+          if git diff --quiet -- README.md; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "README already matches the feature list."
+            exit 0
+          fi
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B docs/automated-readme-sync
+          git add README.md
+          git commit -m "docs: sync README feature list"
+          git push --force origin HEAD:docs/automated-readme-sync
+          echo "changed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update pull request
+        if: steps.push.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
+        run: |
+          pr_number=$(gh pr list \
+            --state open \
+            --base main \
+            --head "$REPOSITORY_OWNER:docs/automated-readme-sync" \
+            --json number \
+            --jq '.[0].number // empty')
+
+          if [ -z "$pr_number" ]; then
+            gh pr create \
+              --base main \
+              --head docs/automated-readme-sync \
+              --title "docs: sync README feature list" \
+              --body "Automated README feature-list update. Please review before merging. This pull request is not merged automatically."
+          else
+            echo "Updated existing documentation-sync PR #$pr_number."
+          fi
